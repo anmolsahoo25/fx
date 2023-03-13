@@ -25,6 +25,8 @@ rule token = parse
     { PERFORM }
 | '_'
     { ANY }
+| '"' (['a'-'z' 'A'-'Z' '0'-'9']+ as s) '"'
+    { SCONST s }
 | ['a'-'z']+ as i
     { ID i }
 | ['0'-'9']+ as n
@@ -45,3 +47,5 @@ rule token = parse
     { COMMA }
 | '|'
     { BAR }
+| '+'
+    { PLUS }

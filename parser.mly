@@ -2,10 +2,12 @@
 %token EOF
 %token<string> ID
 %token<string> NCONST
+%token<string> SCONST
 %token LPAREN RPAREN
 %token LCPAREN RCPAREN
 %token ARROW COLON COMMA
 %token LET EQUAL IN HANDLE BAR WITH PERFORM ANY
+%token PLUS
 
 %start <Ast.t> prog
 
@@ -19,7 +21,7 @@ prog:
 | EOF
     { { func_decls = [] } }
 | FN s = ID LPAREN a = args RPAREN ARROW t = ID LCPAREN e = expr RCPAREN p = prog
-    { { func_decls = { name = s; ret_type = t; args = a; body = e } :: p.func_decls } }
+    { { func_decls = { name = s; ret_type = t; args = Array.of_list a; body = e } :: p.func_decls } }
 
 args:
 | v = ID COLON t = ID a = args
@@ -35,13 +37,15 @@ expr:
 | PERFORM e = expr
     { Perform { effect = e } }
 | f = ID LPAREN a = u_args RPAREN
-    { FunApp {func_name = f; args = a } }
-| LPAREN u = u_args RPAREN
-    { Tuple {elts = u} }
+    { FunApp {func_name = f; args = Array.of_list a } }
+| e1 = expr PLUS e2 = expr
+    { BinOp (e1,e2,"+") }
 | v = ID
     { Var v }
 | n = NCONST
-    { Const n }
+    { Const (n, TyInt) }
+| s = SCONST
+    { Const (s, TyString) }
 | ANY
     { Any }
 

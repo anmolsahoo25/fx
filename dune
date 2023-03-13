@@ -6,5 +6,5 @@
 
 (executable
   (name fx)
-  (libraries llvm)
+  (libraries llvm llvm.analysis)
   (preprocess (pps ppx_deriving.show)))
