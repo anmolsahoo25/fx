@@ -3,6 +3,6 @@ fn add2(x : int) -> int {
 }
 
 fn main() -> int {
-  handle add2(10) with
-  | v -> v
+  let x = add2(10) in
+  x
 }

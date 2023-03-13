@@ -23,6 +23,8 @@ rule token = parse
     { WITH }
 | "perform"
     { PERFORM }
+| "effect"
+    { EFFECT }
 | '_'
     { ANY }
 | '"' (['a'-'z' 'A'-'Z' '0'-'9']+ as s) '"'
