@@ -1,2 +1,2 @@
 %: %.fx
-	dune exec ../fx.exe $< build
+	dune exec --profile=release ../fx.exe $< build

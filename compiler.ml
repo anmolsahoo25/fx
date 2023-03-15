@@ -4,6 +4,7 @@ open Ast
 
 (* compile ast to llvm *)
 let compile prog bin_name bin_dir =
+  (* llvm global variables *)
   let context = create_context () in
   let prog_module = create_module context bin_name in
   let prog_ll_file = Printf.sprintf "%s/%s.ll" bin_dir bin_name in
@@ -14,6 +15,11 @@ let compile prog bin_name bin_dir =
   let var_counter = ref 0 in
   let global_counter = ref 0 in
 
+  (* llvm types *)
+  let void_type = void_type context in
+  let int_type = i32_type context in
+  let str_type = i8_type context |> pointer_type in
+
   (* global declarations *)
   let print =
     declare_function "printf"
@@ -21,20 +27,19 @@ let compile prog bin_name bin_dir =
       prog_module
   in
 
-  let personality =
-    declare_function "personality"
-      (function_type (i32_type context) [||])
+  let memalign =
+    declare_function "posix_memalign"
+      (function_type int_type [| pointer_type str_type; int_type; int_type |])
+      prog_module
+  in
+
+  let fiber1 =
+    declare_function "fiber1"
+      (function_type int_type [| int_type; str_type; str_type |])
       prog_module
   in
 
   Hashtbl.add func_table "print" print;
-
-  (* llvm types *)
-  let void_type = void_type context in
-  let int_type = i32_type context in
-  let str_type = i8_type context |> pointer_type in
-
-  let global_exn = declare_global (pointer_type int_type) "exn" prog_module in
 
   (* util functions *)
   let ret_type = function
@@ -91,7 +96,7 @@ let compile prog bin_name bin_dir =
             (ret, [])
         | _ -> failwith "invalid op")
     | FunApp { func_name; args } ->
-        let fun_call =
+        let ret =
           build_call
             (Hashtbl.find func_table func_name)
             (Array.map
@@ -99,7 +104,7 @@ let compile prog bin_name bin_dir =
                args)
             (get_new_var ()) ibuilder
         in
-        (fun_call, [])
+        (ret, [])
     | Let { bind_var; bind_expr; body } -> (
         match bind_var with
         | Any ->
@@ -107,39 +112,44 @@ let compile prog bin_name bin_dir =
             let ret = compile_body ibuilder params exit_bb body |> fst in
             (ret, [])
         | Var v ->
-            let bind_val = compile_body ibuilder params exit_bb bind_expr |> fst in
+            let bind_val =
+              compile_body ibuilder params exit_bb bind_expr |> fst
+            in
             let ret =
               compile_body ibuilder
                 (Array.concat [ [| (v, bind_val) |]; params ])
-                exit_bb body |> fst
+                exit_bb body
+              |> fst
             in
             (ret, [])
         | _ -> failwith "binding a non var or wildcard")
     | Handle { body = FunApp { func_name; args }; _ } ->
-        let unwind_bb =
-          insert_block context
-            (Printf.sprintf "unwind_%s_%s" func_name (get_new_var ()))
-            exit_bb
+        let new_sp = build_alloca str_type (get_new_var ()) ibuilder in
+        let _ =
+          build_call memalign
+            [| new_sp; const_int int_type 16; const_int int_type 16384 |]
+            (get_new_var ()) ibuilder
         in
-        let unwind_builder = builder_at_end context unwind_bb in
+        let new_sp_val = build_load new_sp (get_new_var ()) ibuilder in
+        let func = Hashtbl.find func_table func_name in
+        let func_address = build_bitcast func str_type (get_new_var ())
+        ibuilder in
         let ret =
-          build_invoke
-            (Hashtbl.find func_table func_name)
-            (Array.map (fun s -> compile_body ibuilder params exit_bb s |> fst) args)
-            exit_bb unwind_bb (get_new_var ()) ibuilder
+          build_call fiber1
+            (Array.concat
+               [
+                 Array.map
+                   (fun s -> compile_body ibuilder params exit_bb s |> fst)
+                   args;
+                 [| new_sp_val; func_address |];
+               ])
+            (get_new_var ()) ibuilder
         in
-
-        (* build landingpad *)
-        let landingpad =
-          build_landingpad (pointer_type int_type) personality 1
-            (get_new_var ()) unwind_builder
-        in
-        add_clause landingpad global_exn;
-        let _ = build_br exit_bb unwind_builder in
-        (ret, [unwind_bb])
+        (ret, [])
     | _ -> failwith "Invalid parse value"
   in
   let compile_func func =
+    (* util functions *)
     let func_type =
       function_type (ret_type func.ret_type)
         (Array.map (fun (_, s) -> ret_type s) func.args)
@@ -163,20 +173,10 @@ let compile prog bin_name bin_dir =
       compile_body entry_builder named_params exit_bb func.body
     in
     (match func.body with
-    | Handle _ -> ()
     | _ -> build_br exit_bb entry_builder |> ignore);
-    let _ =
-      match func.ret_type with
-      | "unit" -> build_ret_void exit_builder
-      | _ ->
-          let phi =
-            build_phi
-              ((ret_val, entry_bb) :: (List.map (fun s -> (const_int int_type 0,
-              s)) unwind_blocks))
-              (get_new_var ()) exit_builder
-          in
-          build_ret phi exit_builder
-    in
+    (match func.ret_type with
+        | "unit" -> build_ret_void exit_builder |> ignore
+        | _ -> build_ret ret_val exit_builder |> ignore);
     assert_valid_function func_def
   in
 
@@ -190,5 +190,5 @@ let compile prog bin_name bin_dir =
   (* link runtime and make executable *)
   ignore
     (Sys.command
-       (Printf.sprintf "clang %s ../runtime.c -o %s/%s" prog_ll_file bin_dir
+       (Printf.sprintf "clang %s ../runtime.s -o %s/%s" prog_ll_file bin_dir
           bin_name))
