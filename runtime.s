@@ -4,21 +4,17 @@
 _fiber1:
     .cfi_startproc
 
-    ; create stack space to store x29 and x30
-    sub sp, sp, #32
-    .cfi_def_cfa_offset 32
-
-    ; store fp and link register
-    stp x29, x30, [sp, #16]
-
     ; load parent sp in w8
-    add x8, sp, #32
+    add x8, sp, #0
 
     ; update new sp
     add sp, x1, 0
 
-    ; create fiber context
-    sub sp,sp,#16
+    ; create stack space to store x29 , x30, old sp, extra
+    sub sp, sp, #32
+
+    ; store fp and link register
+    stp x29, x30, [sp, #16]
 
     ; store parent sp in first slot
     str x8, [sp,#8]
