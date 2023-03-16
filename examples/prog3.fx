@@ -4,5 +4,6 @@ fn add2(x : int) -> int {
 
 fn main() -> int {
   let x = add2(10) in
-  x
+  let y = add2(12) in
+  x + y
 }

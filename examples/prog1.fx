@@ -1,16 +1,11 @@
-fn thread(x : int, y : int) -> int {
-  x
+fn add2(x : int, y : int) -> int {
+  let w = x in
+  let z = y in
+  w + z
 }
 
-fn worker(v : string) -> int {
-  let _ = perform (fork,thread,20) in
-  0
-}
-
-fn main() -> unit {
+fn main() -> int {
   let x = 10 in
   let y = 20 in
-  handle thread with
-  | (write,10) -> print(10)
-  | _ -> print(20)
+  x + y
 }

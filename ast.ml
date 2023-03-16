@@ -15,6 +15,6 @@ and expr =
   | BinOp of (expr * expr * string)
   | FunApp of { func_name : string; args : expr array }
   | Let of { bind_var : expr; bind_expr : expr; body : expr }
-  | Handle of { body : expr; branches : (expr * expr) list }
+  | Handle of { body : expr; branches : (expr list * expr) list }
   | Perform of { effect : expr }
 [@@deriving show]

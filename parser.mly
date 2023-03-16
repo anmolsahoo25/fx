@@ -6,7 +6,7 @@
 %token LPAREN RPAREN
 %token LCPAREN RCPAREN
 %token ARROW COLON COMMA
-%token LET EQUAL IN HANDLE BAR WITH PERFORM ANY EFFECT
+%token LET EQUAL IN HANDLE BAR WITH ANY
 %token PLUS
 
 %start <Ast.t> prog
@@ -34,8 +34,6 @@ expr:
     { Let { bind_var; bind_expr; body } }
 | HANDLE body = expr WITH branches = pattern
     { Handle { body ; branches } }
-| PERFORM e = expr
-    { Perform { effect = e } }
 | f = ID LPAREN a = u_args RPAREN
     { FunApp {func_name = f; args = Array.of_list a } }
 | e1 = expr PLUS e2 = expr
@@ -56,6 +54,6 @@ u_args:
 | { [] }
 
 pattern:
-| BAR s = expr ARROW t = expr p = pattern
-  { (s,t) :: p }
+| BAR u = u_args ARROW e = expr p = pattern
+  { (u,e) :: p }
 | { [] }
