@@ -10,7 +10,6 @@ let compile file_name bin_dir =
   let lexbuf = Lexing.from_channel (open_in file_name) in
   try
     let prog = Parser.prog Lexer.token lexbuf in
-    Printf.printf "[LOG]: AST\n%s\n" (Ast.show prog);
     Compiler.compile prog bin_name bin_dir
   with
   | Parser.Error

@@ -5,15 +5,9 @@ _dummy_personality:
     ret
 
     .section    __TEXT,__text,regular,pure_instructions
-    .globl  _dummy_continue
+    .globl  _exn
     .p2align    2
-_dummy_continue:
-    ret
-
-    .section    __TEXT,__text,regular,pure_instructions
-    .globl  _null
-    .p2align    2
-_null:
+_exn:
     ret
 
     .section    __TEXT,__text,regular,pure_instructions
@@ -64,3 +58,35 @@ _fiber1:
     ; return
     ret
     .cfi_endproc
+
+    .section    __TEXT,__text,regular,pure_instructions
+    .globl  _perform
+    .p2align    2
+_perform:
+    .cfi_startproc
+
+    ; create 2 slots for storing x29, x30
+    sub sp, sp, #16
+
+    ; store x29 and x30
+    stp x29, x30, [sp]
+
+    ; load parent sp into x8
+    ldr x8, [x29, #-24]
+
+    ; load parent sp into sp
+    add sp, x8, 0
+
+    ; load exn handler address in w8
+    ldr x8, [x29, #-32]
+
+    ; jump to handler
+    br x8
+
+    .cfi_endproc
+
+    .section    __TEXT,__text,regular,pure_instructions
+    .globl  _continue
+    .p2align    2
+_continue:
+    ret
