@@ -1,11 +1,10 @@
-fn add2(x : int, y : int) -> int {
-  let w = x in
-  let z = y in
-  w + z
+fn add2(x : int) -> int {
+  let y = perform("get", 10) in
+  x + y
 }
 
 fn main() -> int {
-  let x = add2(10,20) in
-  let y = add2(20,30) in
-  x + y
+  let a = 10 in
+  handle add2(a) with
+  | "get",v,k -> continue(v+1, k)
 }

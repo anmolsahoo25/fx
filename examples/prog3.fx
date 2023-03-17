@@ -1,7 +1,6 @@
 fn add2(x : int) -> int {
   let y = perform("get",2) in
-  let z = perform("get",2) in
-  x + y + z
+  x + y
 }
 
 fn main() -> int {

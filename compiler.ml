@@ -117,15 +117,24 @@ let compile prog bin_name bin_dir =
             Array.find_opt (fun (s, _) -> s = v) params |> Option.get |> snd
           in
           (ret, [ entry_bb ])
+      | MutVar v ->
+          let ptr =
+            Array.find_opt (fun (s, _) -> s = v) params |> Option.get |> snd
+          in
+          let ret = build_load ptr (get_new_var ()) ibuilder in
+          (ret, [ entry_bb ])
       | BinOp (e1, e2, name) -> (
           match name with
           | "+" ->
-              let ret =
-                build_add
-                  (compile_body_aux e1 |> fst)
-                  (compile_body_aux e2 |> fst)
-                  (get_new_var ()) ibuilder
+              let b1 = compile_body_aux e1 |> fst in
+              let b2 = compile_body_aux e2 |> fst in
+              let b1_cast =
+                build_ptrtoint b1 int_type (get_new_var ()) ibuilder
               in
+              let b2_cast =
+                build_ptrtoint b2 int_type (get_new_var ()) ibuilder
+              in
+              let ret = build_add b1_cast b2_cast (get_new_var ()) ibuilder in
               (ret, [ entry_bb ])
           | _ -> failwith "invalid op")
       | FunApp { func_name; args } -> (
@@ -167,7 +176,14 @@ let compile prog bin_name bin_dir =
               (* resume effect *)
               let ret =
                 build_call continue
-                  (Array.map (fun s -> compile_body_aux s |> fst) args)
+                  (Array.map
+                     (fun s ->
+                       let ret = compile_body_aux s |> fst in
+                       let build_cast =
+                         build_inttoptr ret str_type (get_new_var ()) ibuilder
+                       in
+                       build_cast)
+                     args)
                   (get_new_var ()) ibuilder
               in
               (ret, [ entry_bb ])
@@ -185,17 +201,12 @@ let compile prog bin_name bin_dir =
               let _, next_bb = compile_body_aux bind_expr in
               if List.length next_bb > 0 then
                 let ret, next_bb =
-                  compile_body (List.hd next_bb)
-                    params
-                    exit_bb func body
+                  compile_body (List.hd next_bb) params exit_bb func body
                 in
                 (ret, next_bb)
               else
                 let ret =
-                  compile_body entry_bb
-                    params
-                    exit_bb func body
-                  |> fst
+                  compile_body entry_bb params exit_bb func body |> fst
                 in
                 (ret, [ entry_bb ])
           | Var v ->
@@ -211,6 +222,30 @@ let compile prog bin_name bin_dir =
                 let ret =
                   compile_body entry_bb
                     (Array.concat [ [| (v, bind_val) |]; params ])
+                    exit_bb func body
+                  |> fst
+                in
+                (ret, [ entry_bb ])
+          | MutVar v ->
+              let mut_var_val =
+                build_alloca str_type (get_new_var ()) ibuilder
+              in
+              let bind_val, next_bb = compile_body_aux bind_expr in
+              let val_cast =
+                build_inttoptr bind_val str_type (get_new_var ()) ibuilder
+              in
+              let _ = build_store val_cast mut_var_val ibuilder in
+              if List.length next_bb > 0 then
+                let ret, next_bb =
+                  compile_body (List.hd next_bb)
+                    (Array.concat [ [| (v, mut_var_val) |]; params ])
+                    exit_bb func body
+                in
+                (ret, next_bb)
+              else
+                let ret =
+                  compile_body entry_bb
+                    (Array.concat [ [| (v, mut_var_val) |]; params ])
                     exit_bb func body
                   |> fst
                 in
@@ -241,8 +276,9 @@ let compile prog bin_name bin_dir =
           let eff_obj =
             build_extractvalue landingpad 1 (get_new_var ()) lpad_builder
           in
-
-          let load_eff_val = build_load eff_obj (get_new_var ()) lpad_builder in
+          let cast_eff_val_ptr = build_bitcast eff_obj (pointer_type @@ i64_type
+          context) (get_new_var ()) lpad_builder in
+          let load_eff_val = build_load cast_eff_val_ptr (get_new_var ()) lpad_builder in
 
           let load_eff_val =
             build_inttoptr load_eff_val str_type (get_new_var ()) lpad_builder
@@ -339,12 +375,29 @@ let compile prog bin_name bin_dir =
             build_invoke fiber1
               (Array.concat
                  [
-                   Array.map (fun s -> compile_body_aux s |> fst) args;
+                   Array.map
+                     (fun s ->
+                       let b1 = compile_body_aux s |> fst in
+                       let b1_cast =
+                         build_inttoptr b1 str_type (get_new_var ()) ibuilder
+                       in
+                       b1_cast)
+                     args;
                    [| new_sp_val; func_address; lpad_address |];
                  ])
               next_bb lpad_bb (get_new_var ()) ibuilder
           in
           (ret, [ next_bb ])
+      | Set { var = MutVar v; body } ->
+          let ptr =
+            Array.find_opt (fun (s, _) -> s = v) params |> Option.get |> snd
+          in
+          let ret_val, _ = compile_body_aux body in
+          let cast_val =
+            build_inttoptr ret_val str_type (get_new_var ()) ibuilder
+          in
+          let ret = build_store cast_val ptr ibuilder in
+          (ret, [ entry_bb ])
       | _ -> failwith "Invalid parse value"
     in
     compile_body_aux body
@@ -380,7 +433,11 @@ let compile prog bin_name bin_dir =
     (match func.body with _ -> build_br exit_bb entry_builder |> ignore);
     (match func.ret_type with
     | "unit" -> build_ret_void exit_builder |> ignore
-    | _ -> build_ret ret_val exit_builder |> ignore);
+    | _ ->
+        let cast_val =
+          build_ptrtoint ret_val int_type (get_new_var ()) exit_builder
+        in
+        build_ret cast_val exit_builder |> ignore);
     dump_module prog_module;
     assert_valid_function func_def
   in

@@ -21,14 +21,18 @@ rule token = parse
     { HANDLE }
 | "with"
     { WITH }
+| "mut"
+    { MUT }
 | '_'
     { ANY }
-| '"' (['a'-'z' 'A'-'Z' '0'-'9' ' ']+ as s) '"'
+| '"' (['a'-'z' 'A'-'Z' '0'-'9' ' ']* as s) '"'
     { SCONST s }
 | (['a'-'z'] ['a'-'z' '0'-'9']*) as i
     { ID i }
 | ['0'-'9']+ as n
     { NCONST n }
+| ":="
+    { SET }
 | "->"
     { ARROW }
 | '('
@@ -41,9 +45,13 @@ rule token = parse
     { RCPAREN }
 | ':'
     { COLON }
+| ';'
+    { SEMICOLON }
 | ','
     { COMMA }
 | '|'
     { BAR }
 | '+'
     { PLUS }
+| '!'
+    { EXCL }

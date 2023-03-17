@@ -12,9 +12,11 @@ and expr =
   | Any
   | Const of (string * ty)
   | Var of string
+  | MutVar of string
   | BinOp of (expr * expr * string)
   | FunApp of { func_name : string; args : expr array }
   | Let of { bind_var : expr; bind_expr : expr; body : expr }
+  | Set of { var : expr ; body : expr }
   | Handle of { body : expr; branches : (expr list * expr) array}
   | Perform of { effect : expr }
 [@@deriving show]

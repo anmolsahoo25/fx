@@ -6,7 +6,7 @@
 %token LPAREN RPAREN
 %token LCPAREN RCPAREN
 %token ARROW COLON COMMA
-%token LET EQUAL IN HANDLE BAR WITH ANY
+%token LET EQUAL IN HANDLE BAR WITH ANY SET MUT EXCL SEMICOLON
 %token PLUS
 
 %start <Ast.t> prog
@@ -32,12 +32,22 @@ args:
 expr:
 | LET bind_var = expr EQUAL bind_expr = expr IN body = expr
     { Let { bind_var; bind_expr; body } }
+| v = ID SET bind_expr = expr SEMICOLON body = expr
+    { Let { bind_var = MutVar v; bind_expr ; body } }
+| bind_expr = expr SEMICOLON body = expr
+    { Let { bind_var = Any ; bind_expr; body } }
 | HANDLE body = expr WITH branches = pattern
     { Handle { body ; branches = Array.of_list branches } }
 | f = ID LPAREN a = u_args RPAREN
     { FunApp {func_name = f; args = Array.of_list a } }
 | e1 = expr PLUS e2 = expr
     { BinOp (e1,e2,"+") }
+| v = ID SET e=expr
+    { Set { var = MutVar v ; body = e} }
+| MUT v = ID
+    { MutVar v }
+| EXCL v = ID
+    { MutVar v }
 | v = ID
     { Var v }
 | n = NCONST
