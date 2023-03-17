@@ -2,7 +2,6 @@ open Llvm
 open Llvm_analysis
 open Ast
 
-(* compile ast to llvm *)
 let compile prog bin_name bin_dir =
   (* llvm global variables *)
   let context = create_context () in
@@ -21,10 +20,20 @@ let compile prog bin_name bin_dir =
   let int_type = i32_type context in
   let str_type = i8_type context |> pointer_type in
 
-  (* global declarations *)
+  (* value and type declarations *)
+  let exn = declare_global str_type "exn" prog_module in
+  let exn_type = struct_type context [| str_type; str_type |] in
+
+  let err_msg =
+    define_global "err_msg"
+      (const_string context "unhandled\n  effect\n")
+      prog_module
+  in
+
+  (* function declarations *)
   let print =
     declare_function "printf"
-      (function_type (i32_type context) [| pointer_type (i8_type context) |])
+      (function_type int_type [| str_type |])
       prog_module
   in
 
@@ -46,8 +55,6 @@ let compile prog bin_name bin_dir =
       prog_module
   in
 
-  let exn = declare_global str_type "exn" prog_module in
-
   let continue =
     declare_function "continue"
       (function_type int_type [| str_type; str_type |])
@@ -60,14 +67,7 @@ let compile prog bin_name bin_dir =
       prog_module
   in
 
-  let exn_type = struct_type context [| str_type; str_type |] in
-
-  let err_msg =
-    define_global "err_msg"
-      (const_string context "unhandled\n  effect\n")
-      prog_module
-  in
-
+  (* adding values and functions to global tables *)
   Hashtbl.add func_table "print" print;
   Hashtbl.add eff_table "get" 0;
   Hashtbl.add eff_table "put" 1;
@@ -80,7 +80,6 @@ let compile prog bin_name bin_dir =
     | _ -> failwith "Invalid return type"
   in
 
-  (* compile function *)
   let get_new_var () =
     let c = !var_counter in
     var_counter := !var_counter + 1;
@@ -93,6 +92,7 @@ let compile prog bin_name bin_dir =
     Printf.sprintf "G%d" c
   in
 
+  (* function to compile body *)
   let rec compile_body entry_bb params exit_bb func body =
     let ibuilder = builder_at_end context entry_bb in
     let rec compile_body_aux = function
