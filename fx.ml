@@ -1,11 +1,6 @@
 let compile file_name bin_dir =
   let bin_name = String.sub file_name 0 (String.length file_name - 3) in
 
-  (* log information *)
-  Printf.printf "[LOG]: Input file %s\n" file_name;
-  Printf.printf "[LOG]: Output dir %s\n" bin_dir;
-  Printf.printf "[LOG]: Output bin %s\n" bin_name;
-
   (* parse and compile file *)
   let lexbuf = Lexing.from_channel (open_in file_name) in
   try

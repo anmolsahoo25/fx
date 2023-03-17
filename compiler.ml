@@ -448,7 +448,6 @@ let compile prog bin_name bin_dir =
           build_ptrtoint ret_val int_type (get_new_var ()) exit_builder
         in
         build_ret cast_val exit_builder |> ignore);
-    dump_module prog_module;
     assert_valid_function func_def
   in
 
@@ -456,7 +455,6 @@ let compile prog bin_name bin_dir =
   List.iter compile_func prog.func_decls;
 
   (* dump program to llvm ir *)
-  assert_valid_module prog_module;
   print_module prog_ll_file prog_module;
 
   (* link runtime and make executable *)

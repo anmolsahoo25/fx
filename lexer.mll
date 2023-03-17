@@ -27,6 +27,8 @@ rule token = parse
     { NULL }
 | '_'
     { ANY }
+| "(*" ['a'-'z' 'A'-'Z' '0'-'9' ' ' ',']* "*)"
+    { token lexbuf }
 | '"' (['a'-'z' 'A'-'Z' '0'-'9' ' ']* as s) '"'
     { SCONST s }
 | (['a'-'z'] ['a'-'z' '0'-'9']*) as i
