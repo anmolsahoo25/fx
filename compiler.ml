@@ -77,6 +77,7 @@ let compile prog bin_name bin_dir =
     | "string" -> str_type
     | "int" -> int_type
     | "unit" -> void_type
+    | "mut" -> pointer_type str_type
     | _ -> failwith "Invalid return type"
   in
 

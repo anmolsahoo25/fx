@@ -26,14 +26,17 @@ prog:
 args:
 | v = ID COLON t = ID a = args
     { (v,t) :: a }
-| COMMA a = args { a }
+| v = ID COLON t = MUT ID a = args
+    { (v,"mut") :: a }
+| COMMA a = args
+    { a }
 | { [] }
 
 expr:
 | LET bind_var = expr EQUAL bind_expr = expr IN body = expr
     { Let { bind_var; bind_expr; body } }
 | v = ID SET bind_expr = expr SEMICOLON body = expr
-    { Let { bind_var = MutVar v; bind_expr ; body } }
+    { Let { bind_var = Any ; bind_expr = Set {var = MutVar v; body = bind_expr} ; body } }
 | bind_expr = expr SEMICOLON body = expr
     { Let { bind_var = Any ; bind_expr; body } }
 | HANDLE body = expr WITH branches = pattern
