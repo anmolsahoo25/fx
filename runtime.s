@@ -71,13 +71,19 @@ _perform:
     ; store x29 and x30
     stp x29, x30, [sp]
 
+    ; move sp into x8
+    add x8, sp, 0
+
+    ; store sp in continuation object
+    str x8, [x1,#8]
+
     ; load parent sp into x8
     ldr x8, [x29, #-24]
 
     ; load parent sp into sp
     add sp, x8, 0
 
-    ; load exn handler address in w8
+    ; load exn handler address in x8
     ldr x8, [x29, #-32]
 
     ; jump to handler
@@ -89,4 +95,18 @@ _perform:
     .globl  _continue
     .p2align    2
 _continue:
+
+    ; load continuation sp
+    ldr x8, [x1,#8]
+
+    ; load current sp
+    mov sp, x8
+
+    ; load link register and fp
+    ldp x29,x30,[sp]
+
+    ; erase two slack slots
+    add sp, sp, #16
+
+    ; return to caller
     ret

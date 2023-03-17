@@ -49,16 +49,16 @@ let compile prog bin_name bin_dir =
 
   let continue =
       declare_function "continue" (function_type int_type [|
-      str_type|]) prog_module
+          str_type ; str_type|]) prog_module
   in
 
   let perform =
     declare_function "perform"
-      (function_type int_type [| int_type |])
+      (function_type int_type [| int_type ; str_type |])
       prog_module
   in
 
-  let exn_type = struct_type context [| int_type; str_type; str_type |] in
+  let exn_type = struct_type context [| str_type; str_type |] in
 
   Hashtbl.add func_table "print" print;
 
@@ -121,9 +121,17 @@ let compile prog bin_name bin_dir =
       | FunApp { func_name; args } -> (
           match func_name with
           | "perform" ->
+              (* allocate exception object *)
+              let exn_typ = const_int int_type 0 in
+              let exn_obj = build_malloc exn_type (get_new_var ()) ibuilder in
+              let exn_val = const_struct context [| const_null str_type ;
+              const_null str_type |] in
+              let _ = build_store exn_val exn_obj ibuilder in
+              let exn_pointer = build_bitcast exn_obj str_type  (get_new_var ())
+              ibuilder in
               let ret =
                 build_call perform
-                  [| const_int int_type 0 |]
+                  [| exn_typ ; exn_pointer |]
                   (get_new_var ()) ibuilder
               in
               (ret, [ entry_bb ])
@@ -234,7 +242,7 @@ let compile prog bin_name bin_dir =
     let eff_obj =
       build_extractvalue landingpad 1 (get_new_var ()) lpad_builder
     in
-    let _ = build_call continue [| eff_obj |] (get_new_var ()) lpad_builder in
+    let _ = build_call continue [| eff_val ; eff_obj |] (get_new_var ()) lpad_builder in
     let _ = build_unreachable lpad_builder in
     let ret_val, unwind_blocks =
       compile_body entry_bb named_params exit_bb lpad_bb func_def func.body
