@@ -80,11 +80,14 @@ _perform:
     ; load parent sp into x8
     ldr x8, [x29, #-24]
 
-    ; load parent sp into sp
-    add sp, x8, 0
+    ; move x8 into sp
+    mov sp, x8
 
     ; load exn handler address in x8
     ldr x8, [x29, #-32]
+
+    ; load parent fp into x29
+    ldr x29, [x29, #-16]
 
     ; jump to handler
     br x8

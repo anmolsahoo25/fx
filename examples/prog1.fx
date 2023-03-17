@@ -5,7 +5,7 @@ fn add2(x : int, y : int) -> int {
 }
 
 fn main() -> int {
-  let x = 10 in
-  let y = 20 in
+  let x = add2(10,20) in
+  let y = add2(20,30) in
   x + y
 }

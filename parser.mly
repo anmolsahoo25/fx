@@ -33,7 +33,7 @@ expr:
 | LET bind_var = expr EQUAL bind_expr = expr IN body = expr
     { Let { bind_var; bind_expr; body } }
 | HANDLE body = expr WITH branches = pattern
-    { Handle { body ; branches } }
+    { Handle { body ; branches = Array.of_list branches } }
 | f = ID LPAREN a = u_args RPAREN
     { FunApp {func_name = f; args = Array.of_list a } }
 | e1 = expr PLUS e2 = expr

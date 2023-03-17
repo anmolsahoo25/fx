@@ -14,6 +14,7 @@ let compile prog bin_name bin_dir =
   let func_table = Hashtbl.create 50 in
   let var_counter = ref 0 in
   let global_counter = ref 0 in
+  let eff_table = Hashtbl.create 50 in
 
   (* llvm types *)
   let void_type = void_type context in
@@ -35,7 +36,7 @@ let compile prog bin_name bin_dir =
 
   let fiber1 =
     declare_function "fiber1"
-      (function_type int_type [| int_type; str_type; str_type; str_type |])
+      (function_type int_type [| str_type; str_type; str_type; str_type |])
       prog_module
   in
 
@@ -48,19 +49,28 @@ let compile prog bin_name bin_dir =
   let exn = declare_global str_type "exn" prog_module in
 
   let continue =
-      declare_function "continue" (function_type int_type [|
-          str_type ; str_type|]) prog_module
+    declare_function "continue"
+      (function_type int_type [| str_type; str_type |])
+      prog_module
   in
 
   let perform =
     declare_function "perform"
-      (function_type int_type [| int_type ; str_type |])
+      (function_type str_type [| int_type; str_type |])
       prog_module
   in
 
   let exn_type = struct_type context [| str_type; str_type |] in
 
+  let err_msg =
+    define_global "err_msg"
+      (const_string context "unhandled\n  effect\n")
+      prog_module
+  in
+
   Hashtbl.add func_table "print" print;
+  Hashtbl.add eff_table "get" 0;
+  Hashtbl.add eff_table "put" 1;
 
   (* util functions *)
   let ret_type = function
@@ -83,7 +93,7 @@ let compile prog bin_name bin_dir =
     Printf.sprintf "G%d" c
   in
 
-  let rec compile_body entry_bb params exit_bb lpad_bb func body =
+  let rec compile_body entry_bb params exit_bb func body =
     let ibuilder = builder_at_end context entry_bb in
     let rec compile_body_aux = function
       | Const (n, TyInt) ->
@@ -121,17 +131,43 @@ let compile prog bin_name bin_dir =
       | FunApp { func_name; args } -> (
           match func_name with
           | "perform" ->
-              (* allocate exception object *)
-              let exn_typ = const_int int_type 0 in
+              (* check effect performed *)
+              let eff_typ =
+                match Array.get args 0 with
+                | Const (s, TyString) ->
+                    const_int int_type (Hashtbl.find eff_table s)
+                | _ -> failwith "undeclared effect used"
+              in
+
+              (* allocate eff arg *)
+              let eff_arg = compile_body_aux (Array.get args 1) |> fst in
+              let eff_arg =
+                build_inttoptr eff_arg str_type (get_new_var ()) ibuilder
+              in
+
+              (* allocate eff obj *)
               let exn_obj = build_malloc exn_type (get_new_var ()) ibuilder in
-              let exn_val = const_struct context [| const_null str_type ;
-              const_null str_type |] in
-              let _ = build_store exn_val exn_obj ibuilder in
-              let exn_pointer = build_bitcast exn_obj str_type  (get_new_var ())
-              ibuilder in
+              let exn_obj_val =
+                const_struct context [| eff_arg; const_null str_type |]
+              in
+
+              (* store eff val in obj *)
+              let _ = build_store exn_obj_val exn_obj ibuilder in
+              let exn_pointer =
+                build_bitcast exn_obj str_type (get_new_var ()) ibuilder
+              in
+
+              (* call perform *)
               let ret =
-                build_call perform
-                  [| exn_typ ; exn_pointer |]
+                build_call perform [| eff_typ; exn_pointer |] (get_new_var ())
+                  ibuilder
+              in
+              (ret, [ entry_bb ])
+          | "continue" ->
+              (* resume effect *)
+              let ret =
+                build_call continue
+                  (Array.map (fun s -> compile_body_aux s |> fst) args)
                   (get_new_var ()) ibuilder
               in
               (ret, [ entry_bb ])
@@ -146,34 +182,139 @@ let compile prog bin_name bin_dir =
       | Let { bind_var; bind_expr; body } -> (
           match bind_var with
           | Any ->
-              let _ = compile_body_aux bind_expr |> fst in
-              let ret = compile_body_aux body |> fst in
-              (ret, [ entry_bb ])
+              let _, next_bb = compile_body_aux bind_expr in
+              if List.length next_bb > 0 then
+                let ret, next_bb =
+                  compile_body (List.hd next_bb)
+                    params
+                    exit_bb func body
+                in
+                (ret, next_bb)
+              else
+                let ret =
+                  compile_body entry_bb
+                    params
+                    exit_bb func body
+                  |> fst
+                in
+                (ret, [ entry_bb ])
           | Var v ->
               let bind_val, next_bb = compile_body_aux bind_expr in
               if List.length next_bb > 0 then
                 let ret, next_bb =
                   compile_body (List.hd next_bb)
                     (Array.concat [ [| (v, bind_val) |]; params ])
-                    exit_bb lpad_bb func body
+                    exit_bb func body
                 in
                 (ret, next_bb)
               else
                 let ret =
                   compile_body entry_bb
                     (Array.concat [ [| (v, bind_val) |]; params ])
-                    exit_bb lpad_bb func body
+                    exit_bb func body
                   |> fst
                 in
                 (ret, [ entry_bb ])
           | _ -> failwith "binding a non var or wildcard")
-      | Handle { body = FunApp { func_name; args }; _ } ->
+      | Handle { body = FunApp { func_name; args }; branches } ->
+          (* create landing pad *)
+          let lpad_bb_label = Printf.sprintf "lpad_%s" (get_new_var ()) in
+          let lpad_bb = append_block context lpad_bb_label func in
+          let lpad_builder = builder_at_end context lpad_bb in
+          let landingpad =
+            build_landingpad exn_type dummy_personality 1 (get_new_var ())
+              lpad_builder
+          in
+
+          (* add catch all clause *)
+          let _ =
+            add_clause landingpad (const_bitcast exn (pointer_type int_type))
+          in
+
+          (* extract variables passed by perform *)
+          let eff_typ =
+            build_extractvalue landingpad 0 (get_new_var ()) lpad_builder
+          in
+          let eff_typ =
+            build_pointercast eff_typ int_type (get_new_var ()) lpad_builder
+          in
+          let eff_obj =
+            build_extractvalue landingpad 1 (get_new_var ()) lpad_builder
+          in
+
+          let load_eff_val = build_load eff_obj (get_new_var ()) lpad_builder in
+
+          let load_eff_val =
+            build_inttoptr load_eff_val str_type (get_new_var ()) lpad_builder
+          in
+
+          (* compile handler branches *)
+          let branch_bbs =
+            Array.mapi
+              (fun i (bindings, body) ->
+                (* append new block for lpad continue *)
+                let branch_bb =
+                  append_block context
+                    (Printf.sprintf "%s_%d" lpad_bb_label i)
+                    func
+                in
+                let branch_builder = builder_at_end context branch_bb in
+
+                (* compile body *)
+                let _ =
+                  compile_body branch_bb
+                    (Array.concat
+                       [ [| ("k", eff_obj); ("v", load_eff_val) |]; params ])
+                    exit_bb func body
+                in
+
+                (* terminate lpad *)
+                let _ = build_unreachable branch_builder in
+
+                (* eff typ *)
+                let eff_typ_val =
+                  match List.hd bindings with
+                  | Const (s, TyString) -> s
+                  | _ -> failwith "not an effect"
+                in
+                (branch_bb, eff_typ_val))
+              branches
+          in
+
+          (* build unhandled block *)
+          let unhandled_bb =
+            append_block context
+              (Printf.sprintf "%s_unhandled" lpad_bb_label)
+              func
+          in
+          let unhandled_builder = builder_at_end context unhandled_bb in
+          let err_arg =
+            build_gep err_msg
+              [| const_int int_type 0; const_int int_type 0 |]
+              (get_new_var ()) unhandled_builder
+          in
+          let _ =
+            build_call print [| err_arg |] (get_new_var ()) unhandled_builder
+          in
+          let _ = build_unreachable unhandled_builder in
+
+          let switch =
+            build_switch eff_typ unhandled_bb (Array.length branches)
+              lpad_builder
+          in
+          Array.iter
+            (fun (branch_bb, eff) ->
+              let sw_val = const_int int_type (Hashtbl.find eff_table eff) in
+              add_case switch sw_val branch_bb |> ignore)
+            branch_bbs;
+
           (* get lpad address for top level func *)
           let lpad_address =
             build_bitcast
               (block_address func lpad_bb)
               str_type (get_new_var ()) ibuilder
           in
+
           (* build next bb *)
           let next_bb =
             append_block context
@@ -181,6 +322,7 @@ let compile prog bin_name bin_dir =
               func
           in
           move_block_after entry_bb next_bb;
+
           (* create new stack and launch fiber *)
           let new_sp = build_alloca str_type (get_new_var ()) ibuilder in
           let _ =
@@ -228,24 +370,9 @@ let compile prog bin_name bin_dir =
     let exit_bb = append_block context "exit" func_def in
     let exit_builder = builder_at_end context exit_bb in
 
-    (* create landing pad *)
-    let lpad_bb = append_block context "lpad" func_def in
-    let lpad_builder = builder_at_end context lpad_bb in
-    let landingpad =
-      build_landingpad exn_type dummy_personality 1 (get_new_var ())
-        lpad_builder
-    in
-    let _ = add_clause landingpad (const_bitcast exn (pointer_type int_type)) in
-    let eff_val =
-      build_extractvalue landingpad 0 (get_new_var ()) lpad_builder
-    in
-    let eff_obj =
-      build_extractvalue landingpad 1 (get_new_var ()) lpad_builder
-    in
-    let _ = build_call continue [| eff_val ; eff_obj |] (get_new_var ()) lpad_builder in
-    let _ = build_unreachable lpad_builder in
+    (* compile the function body *)
     let ret_val, unwind_blocks =
-      compile_body entry_bb named_params exit_bb lpad_bb func_def func.body
+      compile_body entry_bb named_params exit_bb func_def func.body
     in
     let entry_builder =
       builder_at_end context (try List.hd unwind_blocks with _ -> entry_bb)
@@ -254,6 +381,7 @@ let compile prog bin_name bin_dir =
     (match func.ret_type with
     | "unit" -> build_ret_void exit_builder |> ignore
     | _ -> build_ret ret_val exit_builder |> ignore);
+    dump_module prog_module;
     assert_valid_function func_def
   in
 

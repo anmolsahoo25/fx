@@ -23,7 +23,7 @@ rule token = parse
     { WITH }
 | '_'
     { ANY }
-| '"' (['a'-'z' 'A'-'Z' '0'-'9']+ as s) '"'
+| '"' (['a'-'z' 'A'-'Z' '0'-'9' ' ']+ as s) '"'
     { SCONST s }
 | (['a'-'z'] ['a'-'z' '0'-'9']*) as i
     { ID i }
