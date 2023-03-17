@@ -96,6 +96,7 @@ let compile prog bin_name bin_dir =
   let rec compile_body entry_bb params exit_bb func body =
     let ibuilder = builder_at_end context entry_bb in
     let rec compile_body_aux = function
+      | Null -> (const_null str_type, [ entry_bb ])
       | Const (n, TyInt) ->
           let ret = const_int int_type (int_of_string n) in
           (ret, [ entry_bb ])
@@ -276,9 +277,14 @@ let compile prog bin_name bin_dir =
           let eff_obj =
             build_extractvalue landingpad 1 (get_new_var ()) lpad_builder
           in
-          let cast_eff_val_ptr = build_bitcast eff_obj (pointer_type @@ i64_type
-          context) (get_new_var ()) lpad_builder in
-          let load_eff_val = build_load cast_eff_val_ptr (get_new_var ()) lpad_builder in
+          let cast_eff_val_ptr =
+            build_bitcast eff_obj
+              (pointer_type @@ i64_type context)
+              (get_new_var ()) lpad_builder
+          in
+          let load_eff_val =
+            build_load cast_eff_val_ptr (get_new_var ()) lpad_builder
+          in
 
           let load_eff_val =
             build_inttoptr load_eff_val str_type (get_new_var ()) lpad_builder
@@ -297,15 +303,19 @@ let compile prog bin_name bin_dir =
                 let branch_builder = builder_at_end context branch_bb in
 
                 (* compile body *)
-                let _ =
+                let _, next_bb =
                   compile_body branch_bb
                     (Array.concat
                        [ [| ("k", eff_obj); ("v", load_eff_val) |]; params ])
                     exit_bb func body
                 in
 
-                (* terminate lpad *)
-                let _ = build_unreachable branch_builder in
+                if List.length next_bb > 0 then
+                  let next_builder = builder_at_end context (List.hd next_bb) in
+                  build_unreachable next_builder |> ignore
+                else
+                  (* terminate lpad *)
+                  build_unreachable branch_builder |> ignore;
 
                 (* eff typ *)
                 let eff_typ_val =

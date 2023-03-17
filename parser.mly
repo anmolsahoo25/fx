@@ -5,7 +5,7 @@
 %token<string> SCONST
 %token LPAREN RPAREN
 %token LCPAREN RCPAREN
-%token ARROW COLON COMMA
+%token ARROW COLON COMMA NULL
 %token LET EQUAL IN HANDLE BAR WITH ANY SET MUT EXCL SEMICOLON
 %token PLUS
 
@@ -56,6 +56,8 @@ expr:
     { Const (s, TyString) }
 | ANY
     { Any }
+| NULL
+    { Null }
 
 u_args:
 | e = expr a = u_args

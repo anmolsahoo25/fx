@@ -23,6 +23,8 @@ rule token = parse
     { WITH }
 | "mut"
     { MUT }
+| "null"
+    { NULL }
 | '_'
     { ANY }
 | '"' (['a'-'z' 'A'-'Z' '0'-'9' ' ']* as s) '"'

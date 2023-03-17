@@ -9,6 +9,7 @@ and func_decl = {
 }
 
 and expr =
+  | Null
   | Any
   | Const of (string * ty)
   | Var of string
