@@ -73,6 +73,7 @@ let compile prog bin_name bin_dir =
   Hashtbl.add eff_table "put" 1;
   Hashtbl.add eff_table "write" 2;
   Hashtbl.add eff_table "read" 3;
+  Hashtbl.add eff_table "suspend" 4;
 
   (* util functions *)
   let ret_type = function

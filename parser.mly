@@ -5,7 +5,7 @@
 %token<string> SCONST
 %token LPAREN RPAREN
 %token LCPAREN RCPAREN
-%token ARROW COLON COMMA NULL
+%token ARROW COLON COMMA NULL BEGIN END
 %token LET EQUAL IN HANDLE BAR WITH ANY SET MUT EXCL SEMICOLON
 %token PLUS
 
@@ -33,6 +33,8 @@ args:
 | { [] }
 
 expr:
+| BEGIN e = expr END
+    { e }
 | LET bind_var = expr EQUAL bind_expr = expr IN body = expr
     { Let { bind_var; bind_expr; body } }
 | v = ID SET bind_expr = expr SEMICOLON body = expr

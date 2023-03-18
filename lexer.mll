@@ -25,6 +25,10 @@ rule token = parse
     { MUT }
 | "null"
     { NULL }
+| "begin"
+    { BEGIN }
+| "end"
+    { END }
 | '_'
     { ANY }
 | "(*" ['a'-'z' 'A'-'Z' '0'-'9' ' ' ',']* "*)"
