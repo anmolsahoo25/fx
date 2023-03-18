@@ -71,6 +71,8 @@ let compile prog bin_name bin_dir =
   Hashtbl.add func_table "print" print;
   Hashtbl.add eff_table "get" 0;
   Hashtbl.add eff_table "put" 1;
+  Hashtbl.add eff_table "write" 2;
+  Hashtbl.add eff_table "read" 3;
 
   (* util functions *)
   let ret_type = function
