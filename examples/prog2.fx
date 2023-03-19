@@ -1,4 +1,4 @@
-(* mutable variables, sequencing *)
+/* mutable variables, sequencing */
 
 fn work(x : mut int, s : mut string) -> int {
   x := 10;

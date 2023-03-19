@@ -1,4 +1,4 @@
-(* simple function calls, let binding *)
+/* simple function calls, let binding */
 
 fn work(x : int) -> int {
   print("hello world");
@@ -6,6 +6,6 @@ fn work(x : int) -> int {
 }
 
 fn main() -> int {
-  let a = 10 in
+  let a = 40 in
   work(a)
 }

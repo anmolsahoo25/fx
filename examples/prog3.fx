@@ -1,4 +1,4 @@
-(* basic effect handlers for io *)
+/* basic effect handlers for io */
 
 fn work(x : int) -> int {
   let y = perform("write","hello") in

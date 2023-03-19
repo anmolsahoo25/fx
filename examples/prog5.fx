@@ -1,4 +1,4 @@
-(* handlers for coroutines *)
+/* handlers for coroutines */
 
 fn work1(x : int) -> int {
   perform("suspend", "hello world from 1");

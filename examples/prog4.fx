@@ -1,4 +1,4 @@
-(* effect handlers for state *)
+/* effect handlers for state */
 
 fn work(x : int) -> unit {
   perform("put",4);
